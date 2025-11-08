@@ -8,9 +8,23 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pymongo import MongoClient
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+from flask_mail import Mail, Message
+
+
 
 app = Flask(__name__)
 CORS(app)
+
+
+app.config["MAIL_SERVER"] = "mailhog"
+app.config["MAIL_PORT"] = 1025
+app.config["MAIL_USE_TLS"] = False
+app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_DEFAULT_SENDER"] = "noreply@miapp.com"
+
+mail = Mail(app)
+
 
 # Config
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET", "dev")
@@ -45,20 +59,33 @@ if metrics.count_documents({}) == 0:
 def health():
     return {"ok": True}
 
-@app.post("/api/auth/register")
+@app.route("/api/auth/register", methods=["POST"])
 def register():
     data = request.get_json()
-    email = data.get("email","").strip().lower()
-    password = data.get("password","")
-    if not email or not password: return jsonify({"error":"datos inválidos"}), 400
-    ph = bcrypt.hash(password)
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "").strip()
+
+    if not email or not password:
+        return jsonify({"error": "Email o contraseña vacíos"}), 400
+
+    # Truncar la contraseña a 72 caracteres
+    if len(password) > 72:
+        password = password[:72]
+
+    ph = bcrypt.hash(password)  # hash seguro
+
     try:
         with pg.cursor() as cur:
-            cur.execute("INSERT INTO users(email,password_hash) VALUES(%s,%s) RETURNING id;", (email, ph))
+            cur.execute(
+                "INSERT INTO users(email,password_hash) VALUES (%s,%s) RETURNING id;",
+                (email, ph)
+            )
             uid = cur.fetchone()["id"]
         return {"id": uid, "email": email}, 201
     except Exception as e:
-        return jsonify({"error": "email ya registrado"}), 409
+        return jsonify({"error": "Email ya registrado"}), 409
+
+
 
 @app.post("/api/auth/login")
 def login():
@@ -83,24 +110,62 @@ def get_metrics():
 def forgot_password():
     data = request.get_json()
     email = data.get("email","").strip().lower()
-    token = s.dumps(email)
-    # Enviar correo "falso": en entorno dev bastaría con log o JSON (MailHog lo verás al integrar real SMTP)
-    reset_link = f"http://localhost/reset?token={token}"
-    return {"message": "enviado", "debug_reset_link": reset_link}
+
+    # Verificar si existe el usuario
+    with pg.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE email=%s;", (email,))
+        user = cur.fetchone()
+    if not user:
+        return jsonify({"error": "email no registrado"}), 404
+
+    token = s.dumps(email)  # firmamos el email
+    reset_link = f"http://localhost/reset-password?token={token}"  # frontend
+
+    # Enviar correo a MailHog
+    msg = Message("Recupera tu contraseña", recipients=[email])
+    msg.body = f"Hola!\n\nHaz clic para cambiar tu contraseña:\n{reset_link}\n\nSi no pediste esto, ignora este mensaje."
+    mail.send(msg)
+
+    return {"message": "Correo enviado correctamente"}
+
 
 @app.post("/api/auth/reset-password")
 def reset_password():
     token = request.args.get("token","")
     data = request.get_json()
-    newpass = data.get("password","")
+    newpass = data.get("password","").strip()
+
+    if not newpass:
+        return jsonify({"error":"contraseña requerida"}), 400
+
     try:
         email = s.loads(token, max_age=3600)
-    except (BadSignature, SignatureExpired):
-        return jsonify({"error":"token inválido o expirado"}), 400
+    except SignatureExpired:
+        return jsonify({"error":"token expirado"}), 400
+    except BadSignature:
+        return jsonify({"error":"token inválido"}), 400
+
     ph = bcrypt.hash(newpass)
+
     with pg.cursor() as cur:
         cur.execute("UPDATE users SET password_hash=%s WHERE email=%s;", (ph, email))
-    return {"ok": True}
-    
+
+    # Enviar correo de confirmación
+    msg = Message(
+        "Confirmación de cambio de contraseña",
+        recipients=[email]
+    )
+    msg.body = (
+        f"Hola!\n\nTu contraseña ha sido cambiada correctamente.\n"
+        "Si no realizaste este cambio, por favor contacta con soporte inmediatamente."
+    )
+    mail.send(msg)
+
+    return {"ok": True, "message": "Contraseña cambiada y correo de confirmación enviado"}
+
+
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # importante: host 0.0.0.0 para que sea accesible desde otros contenedores (nginx)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=False)
