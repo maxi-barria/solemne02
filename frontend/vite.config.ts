@@ -6,10 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://host.docker.internal:5000',
+        target: 'http://host.docker.internal:80',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '/api') // mantiene el mismo path
       }
     }
   }
