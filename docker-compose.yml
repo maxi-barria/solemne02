@@ -18,13 +18,10 @@ services:
   frontend:
     build: ./frontend
     container_name: frontend
-    environment:
-      - VITE_API_URL=/api
-    command: ["sh","-c","npm ci && npm run build && tail -f /dev/null"]
-    volumes:
-      - frontend_build:/app/dist
     networks:
       - appnet
+    depends_on:
+      - backend
 
   backend:
     build: ./backend
