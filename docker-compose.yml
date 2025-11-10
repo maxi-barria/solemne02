@@ -8,7 +8,6 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - frontend_build:/usr/share/nginx/html:ro
     depends_on:
       - frontend
       - backend
@@ -75,7 +74,6 @@ services:
 volumes:
   pgdata:
   mongodata:
-  frontend_build:
 
 networks:
   appnet:
