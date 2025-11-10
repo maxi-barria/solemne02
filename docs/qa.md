@@ -20,6 +20,10 @@ Las pruebas verifican el correcto funcionamiento de los endpoints relacionados c
 ### 1️⃣ Registro de usuario (`/register`)
 **Método:** `POST`  
 **URL:** `http://localhost/api/auth/register`
+**Headers (Authorization):**
+{
+  content-type: application/json
+}
 
 **Body (JSON):**
 ```json
@@ -30,19 +34,22 @@ Las pruebas verifican el correcto funcionamiento de los endpoints relacionados c
 ```
 **Respuesta esperada:**
 codigo 201 Created
-mensaje: Usuario registrado correctamente
+**mensaje:** Usuario registrado correctamente
 Usuario creado y almacendado en la base de datos.
 
 **Resultado obtenido:**
 codigo 201 Created
 
-Evidencia:
+**Evidencia:**
 ![Register](./images/register.png)
 
 **Registro Duplicado**
 **Método:** `POST`  
 **URL:** `http://localhost/api/auth/register`
-
+**Headers (Authorization):**
+{
+  content-type: application/json
+}
 **Body (JSON):**
 ```json
 {
@@ -52,12 +59,12 @@ Evidencia:
 ```
 **Respuesta esperada:**
 Código 409 Conflict
-Mensaje: El usuario ya existe.
+**Mensaje:** El usuario ya existe.
 
 **Resultado obtenido:**
 Código 409 Conflict  
-Mensaje: El usuario ya existe.
-Evidencia:
+**Mensaje:** El usuario ya existe.
+**Evidencia:**
 ![Conflict](./images/register2.png)
 
 
@@ -65,7 +72,10 @@ Evidencia:
 ### 2️⃣ Inicio de sesión (`/login`)
 **Método:** `POST`  
 **URL:** `http://localhost/api/auth/login`
-
+**Headers (Authorization):**
+{
+  content-type: application/json
+}
 **Body (JSON):**
 ```json
 {
@@ -76,18 +86,21 @@ Evidencia:
 **Respuesta esperada:**
 Código 200 OK
 creacion del token
-mensaje: Inicio de sesión exitoso
+**mensaje:** Inicio de sesión exitoso
 
 **Resultado obtenido:**
 Código 200 OK
-mensaje: Inicio de sesión exitoso
-Evidencia:
+**mensaje:** Inicio de sesión exitoso
+**Evidencia:**
 ![Login](./images/login.png)
 
 **Credenciales incorrectas**
 **Método:** `POST`  
 **URL:** `http://localhost/api/auth/login`
-
+**Headers (Authorization):**
+{
+  content-type: application/json
+}
 **Body (JSON):**
 ```json
 {
@@ -98,12 +111,12 @@ Evidencia:
 ```
 **Respuesta esperada:**
 Código 401 Unauthorized
-mensaje: Credenciales invalidas
+**mensaje:**Credenciales invalidas
 
 **Resultado obtenido:**
 Código 401 Unauthorized  
-Mensaje: Credenciales invalidas
-Evidencia:
+**Mensaje:** Credenciales invalidas
+**Evidencia:**
 ![Login](./images/login2.png)
 
 ### 3️⃣ Obtener métricas (`/metrics`)
@@ -120,7 +133,7 @@ Código 200 OK
 
 **Resultado obtenido:**
 Código 200 OK
-Evidencia:
+**Evidencia:**
 ![Metrics](./images/metrics.png)
 
 **Metrica sin token**
@@ -137,7 +150,7 @@ Código 401 Unauthorized
 
 **Resultado obtenido:**
 Código 401 Unauthorized
-Evidencia:
+**Evidencia:**
 ![Metrics](./images/metrics2.png)
 
 ### 4️⃣  Forgot password (`/forgot-password`)
@@ -152,11 +165,11 @@ Evidencia:
 ```
 **Respuesta esperada:**
 Código 200 OK
-mensaje:"correo enviado correctamente"
+**mensaje:**"correo enviado correctamente"
 
 **Resultado obtenido:**
 Código 200 OK
-mensaje:"correo enviado correctamente"
+**mensaje:**"correo enviado correctamente"
 Evidencia:
 ![Forgot](./images/forgot.png)
 ![Forgot](./images/mailhog.png)
@@ -164,7 +177,10 @@ Evidencia:
 ### 5️⃣ Reset password (`/reset-password/:token`)
 **Método:** `POST`  
 **URL:** `http://localhost/api/auth/reset-password?token=InVzdWFyaW8xQGV4YW1wbGU0LmNvbSI.aRAD-w.iqaIl0z0CNpqOJOx2lwxOMvntyg`
-
+**Headers (Authorization):**
+{
+  "content-type": "application/json"
+}
 **Body (JSON):**
 ```json
 
@@ -174,9 +190,22 @@ Evidencia:
 ```
 **Respuesta esperada:**
 Código 200 OK
+**mensaje:** "Contraseña cambiada y correo de confirmación enviado"
 **Resultado obtenido:**
 Código 200 OK
-Evidencia:
-![Reset](./images/reset.png)
+**mensaje:** "Contraseña cambiada y correo de confirmación enviado"
+**Evidencia:**
+![Reset](./images/reset_password.png)
+![Reset](./images/reestablecer.png)
+
+**Token invalido**
+**respuesta esperada**
+Código 400 Bad Request
+mensaje: token invalido
+**Resultado obtenido:**
+Código 400 Bad Request
+mensaje: token invalido
+**Evidencia:**
+![Reset](./images/reset_password2.png)
 
 
