@@ -208,4 +208,7 @@ mensaje: token invalido
 **Evidencia:**
 ![Reset](./images/reset_password2.png)
 
-
+## ✅ Conclusiones
+Todos los endpoints probados responden correctamente según los casos de uso definidos.  
+Las validaciones de errores funcionan como se esperaba (conflicto de usuario, token inválido, falta de autorización, etc.).  
+No se detectaron errores en las rutas implementadas.
