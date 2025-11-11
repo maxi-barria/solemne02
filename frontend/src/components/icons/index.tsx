@@ -73,6 +73,35 @@ export const User: React.FC<{ className?: string }>=({className})=> (
   </svg>
 );
 
+export const Users: React.FC<{ className?: string }>=({className})=> (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M17 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+export const TrendingUp: React.FC<{ className?: string }>=({className})=> (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M3 17l6-6 4 4 8-8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M14 7h7v7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const Activity: React.FC<{ className?: string }>=({className})=> (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M3 12h3l3 8 4-16 3 8h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const BarChart3: React.FC<{ className?: string }>=({className})=> (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M3 3v18h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="6" y="10" width="2" height="8" rx="1" fill="currentColor" />
+    <rect x="10" y="6" width="2" height="12" rx="1" fill="currentColor" />
+    <rect x="14" y="13" width="2" height="5" rx="1" fill="currentColor" />
+  </svg>
+);
+
 export const ArrowLeft: React.FC<{ className?: string }>=({className})=> (
   <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
     <path d="M19 12H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
