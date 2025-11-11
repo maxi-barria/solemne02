@@ -21,7 +21,7 @@ export default function ResetPassword() {
       setMsg("Las contraseñas no coinciden");
       return;
     }
-    console.log("Emviando reset", token, newPass)
+    console.log("Enviando reset", token, newPass)
     try {
       const res = await fetch(`/api/auth/reset-password?token=${token}`, {
         method: "POST",

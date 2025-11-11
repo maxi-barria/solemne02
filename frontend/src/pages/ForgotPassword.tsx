@@ -1,37 +1,66 @@
-import { useState } from 'react'
+import { useState, FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import AuthLayout from "../components/auth/AuthLayout";
+import FormInput from "../components/auth/FormInput";
+import ButtonPrimary from "../components/auth/ButtonPrimary";
+import SmallLink from "../components/auth/SmallLink";
+import Alert from "../components/auth/Alert";
+import { ArrowLeft, Mail } from "../components/icons";
 
-export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState('');
+const ForgotPassword = () => {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setMsg('');
-
-    const r = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email })
-    });
-
-    const j = await r.json();
-    setMsg(j.message || j.error || 'Error');
+    setError(null);
+    setMessage(null);
+    if (!email) return setError("Ingresa tu correo");
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      let j: any = null;
+      try { j = await res.json(); } catch { j = null; }
+      if (res.ok) {
+        setMessage('Si el correo existe en nuestro sistema recibirás un email con instrucciones.');
+      } else {
+        setError(j?.error || `Error ${res.status}`);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error de red');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form className="max-w-sm mx-auto mt-24 space-y-3" onSubmit={onSubmit}>
-      <h1 className="text-2xl font-bold">Recuperar Contraseña</h1>
+    <AuthLayout title="Recuperar contraseña" subtitle="Te enviaremos un correo para restablecer tu contraseña">
+      <div className="mb-2">
+        <SmallLink to="/">
+          <ArrowLeft className="h-4 w-4 mr-2 inline" /> Volver al inicio
+        </SmallLink>
+      </div>
 
-      <input
-        className="border p-2 w-full"
-        placeholder="Tu email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-      />
+      {message && <Alert variant="success">{message}</Alert>}
+      {error && <Alert variant="error">{error}</Alert>}
 
-      <button className="bg-black text-white px-4 py-2 rounded w-full">Enviar enlace</button>
+      <form onSubmit={onSubmit} className="space-y-4">
 
-      {msg && <p className="text-center text-sm text-gray-700">{msg}</p>}
-    </form>
+
+        <FormInput label="Email" type="email" name="email" placeholder="correo@ejemplo.com" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setEmail(e.target.value)} required />
+
+        <ButtonPrimary type="submit" isLoading={loading}>Enviar instrucciones</ButtonPrimary>
+      </form>
+    </AuthLayout>
   );
-}
+};
+
+export default ForgotPassword;
+
