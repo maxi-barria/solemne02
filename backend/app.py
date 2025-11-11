@@ -119,7 +119,7 @@ def forgot_password():
         return jsonify({"error": "email no registrado"}), 404
 
     token = s.dumps(email)  # firmamos el email
-    reset_link = f"http://localhost/reset-password?token={token}"  # frontend
+    reset_link = f"http://localhost:5173/reset-password?token={token}"  # frontend
 
     # Enviar correo a MailHog
     msg = Message("Recupera tu contraseña", recipients=[email])
