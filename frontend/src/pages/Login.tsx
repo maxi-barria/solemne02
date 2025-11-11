@@ -1,56 +1,134 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, FormEvent, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import AuthLayout from "../components/auth/AuthLayout";
+import FormInput from "../components/auth/FormInput";
+import ButtonPrimary from "../components/auth/ButtonPrimary";
+import Alert from "../components/auth/Alert";
+import SmallLink from "../components/auth/SmallLink";
 
-export default function Login() {
-  const [email,setEmail] = useState("");
-  const [password,setPassword] = useState("");
+const Login = () => {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [serverError, setServerError] = useState("");
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const r = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ email, password })
-    });
-
-    const j = await r.json();
-    if (j.access_token) {
-      localStorage.setItem("token", j.access_token);
+  // Check if user is already logged in
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
       navigate("/dashboard");
-    } else {
-      alert(j.error ?? "Error");
+    }
+  }, [navigate]);
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Email validation
+    if (!email.trim()) {
+      newErrors.email = "El email es requerido";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = "Formato de email inválido";
+    }
+
+    // Password validation
+    if (!password) {
+      newErrors.password = "La contraseña es requerida";
+    } else if (password.length < 6) {
+      newErrors.password = "La contraseña debe tener al menos 6 caracteres";
+    } else if (password.length > 72) {
+      newErrors.password = "La contraseña no puede exceder 72 caracteres";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setServerError("");
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const r = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      let j: any = null;
+      try {
+        j = await r.json();
+      } catch (err) {
+        j = { error: r.statusText || `Error ${r.status}` };
+      }
+
+      if (r.ok && j && j.access_token) {
+        localStorage.setItem("token", j.access_token);
+        alert("¡Inicio de sesión exitoso!");
+        navigate("/dashboard");
+      } else {
+        if (r.status === 401) setServerError("Credenciales inválidas. Por favor, verifica tu email y contraseña.");
+        else setServerError(j?.error || `Error ${r.status}`);
+      }
+    } catch (error: any) {
+      setServerError(error.message || "Error al iniciar sesión.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <form className="max-w-sm mx-auto mt-24 space-y-3" onSubmit={onSubmit}>
-      <h1 className="text-2xl font-bold">Iniciar sesión</h1>
+    <AuthLayout title="Iniciar Sesión" subtitle="Ingresa a tu cuenta para continuar">
+      {serverError && (
+        <Alert variant="error" onClose={() => setServerError("")}>{serverError}</Alert>
+      )}
 
-      <input
-        className="border p-2 w-full"
-        placeholder="email"
-        value={email}
-        onChange={e=>setEmail(e.target.value)}
-      />
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormInput
+          label="Email"
+          type="email"
+          name="email"
+          placeholder="tu@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={errors.email}
+          required
+          autoFocus
+          autoComplete="email"
+        />
 
-      <input
-        className="border p-2 w-full"
-        type="password"
-        placeholder="password"
-        value={password}
-        onChange={e=>setPassword(e.target.value)}
-      />
+        <FormInput
+          label="Contraseña"
+          type="password"
+          name="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={errors.password}
+          required
+          showPasswordToggle
+          autoComplete="current-password"
+        />
 
-      <button className="bg-black text-white px-4 py-2 rounded w-full">
-        Entrar
-      </button>
+        <div className="flex items-center justify-between text-sm">
+          <SmallLink to="/forgot-password">¿Olvidaste tu contraseña?</SmallLink>
+        </div>
 
-      <div className="text-center">
-        <Link to="/forgot-password" className="text-blue-600 hover:underline text-sm">
-          ¿Olvidaste tu contraseña?
-        </Link>
-      </div>
-    </form>
+        <ButtonPrimary type="submit" isLoading={isLoading}>Entrar</ButtonPrimary>
+
+        <div className="text-center text-sm text-muted-foreground">
+          ¿No tienes cuenta? <SmallLink to="/register">Regístrate aquí</SmallLink>
+        </div>
+      </form>
+    </AuthLayout>
   );
-}
+};
+
+export default Login;
