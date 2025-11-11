@@ -51,9 +51,14 @@ mdb = mongo.app
 metrics = mdb.metrics
 if metrics.count_documents({}) == 0:
     metrics.insert_many([
-      {"name": "usuarios_totales", "value": 1},
-      {"name": "ventas_hoy", "value": 0},
+        {"name": "Entrenamientos completados", "value": 24},
+        {"name": "Horas totales de entrenamiento", "value": 18},
+        {"name": "Promedio de calorías por sesión", "value": 420},
+        {"name": "Racha activa (días)", "value": 6},
+        {"name": "Sesiones de fuerza", "value": 14},
+        {"name": "Sesiones de cardio", "value": 10}
     ])
+
 
 @app.get("/api/health")
 def health():
@@ -90,15 +95,24 @@ def register():
 @app.post("/api/auth/login")
 def login():
     data = request.get_json()
-    email = data.get("email","").strip().lower()
-    password = data.get("password","")
+    email = data.get("email", "").strip().lower()
+    password = data.get("password", "")
+
     with pg.cursor() as cur:
         cur.execute("SELECT * FROM users WHERE email=%s;", (email,))
         user = cur.fetchone()
+
     if not user or not bcrypt.verify(password, user["password_hash"]):
-        return jsonify({"error":"credenciales inválidas"}), 401
-    token = create_access_token(identity={"id": user["id"], "email": user["email"]})
+        return jsonify({"error": "credenciales inválidas"}), 401
+
+    # ✅ Fix: identity debe ser string, claims adicionales para email
+    token = create_access_token(
+        identity=str(user["id"]),
+        additional_claims={"email": user["email"]}
+    )
+
     return {"access_token": token}
+
 
 @app.get("/api/dashboard/metrics")
 @jwt_required()

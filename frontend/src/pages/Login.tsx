@@ -5,6 +5,7 @@ import FormInput from "../components/auth/FormInput";
 import ButtonPrimary from "../components/auth/ButtonPrimary";
 import Alert from "../components/auth/Alert";
 import SmallLink from "../components/auth/SmallLink";
+import { getToken } from "../auth"; // ✅ usamos helper centralizado
 
 const Login = () => {
   const navigate = useNavigate();
@@ -14,13 +15,14 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState("");
 
-  // Check if user is already logged in
+  // ✅ Solo se ejecuta una vez al montar
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (token) {
-      navigate("/dashboard");
+      // Si ya está logeado, redirige al dashboard
+      navigate("/dashboard", { replace: true });
     }
-  }, [navigate]);
+  }, []); // <-- sin dependencias, ejecuta solo una vez
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -49,9 +51,7 @@ const Login = () => {
     e.preventDefault();
     setServerError("");
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsLoading(true);
 
@@ -65,16 +65,18 @@ const Login = () => {
       let j: any = null;
       try {
         j = await r.json();
-      } catch (err) {
+      } catch {
         j = { error: r.statusText || `Error ${r.status}` };
       }
 
-      if (r.ok && j && j.access_token) {
-        localStorage.setItem("token", j.access_token);
+      if (r.ok && j?.access_token) {
+        // ✅ Guarda token con nombre consistente
+        localStorage.setItem("access_token", j.access_token);
         alert("¡Inicio de sesión exitoso!");
         navigate("/dashboard");
       } else {
-        if (r.status === 401) setServerError("Credenciales inválidas. Por favor, verifica tu email y contraseña.");
+        if (r.status === 401)
+          setServerError("Credenciales inválidas. Verifica tu email y contraseña.");
         else setServerError(j?.error || `Error ${r.status}`);
       }
     } catch (error: any) {
@@ -87,7 +89,9 @@ const Login = () => {
   return (
     <AuthLayout title="Iniciar Sesión" subtitle="Ingresa a tu cuenta para continuar">
       {serverError && (
-        <Alert variant="error" onClose={() => setServerError("")}>{serverError}</Alert>
+        <Alert variant="error" onClose={() => setServerError("")}>
+          {serverError}
+        </Alert>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -121,7 +125,9 @@ const Login = () => {
           <SmallLink to="/forgot-password">¿Olvidaste tu contraseña?</SmallLink>
         </div>
 
-        <ButtonPrimary type="submit" isLoading={isLoading}>Entrar</ButtonPrimary>
+        <ButtonPrimary type="submit" isLoading={isLoading}>
+          Entrar
+        </ButtonPrimary>
 
         <div className="text-center text-sm text-muted-foreground">
           ¿No tienes cuenta? <SmallLink to="/register">Regístrate aquí</SmallLink>
