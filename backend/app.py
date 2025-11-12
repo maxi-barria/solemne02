@@ -10,8 +10,10 @@ from psycopg2.extras import RealDictCursor
 from pymongo import MongoClient
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 from flask_mail import Mail, Message
-
-
+from datetime import datetime, date
+from flask_jwt_extended import get_jwt
+from bson import ObjectId
+from flask_jwt_extended import get_jwt_identity
 
 app = Flask(__name__)
 CORS(app)
@@ -178,6 +180,285 @@ def reset_password():
     return {"ok": True, "message": "Contraseña cambiada y correo de confirmación enviado"}
 
 
+# ==== MÉTRICAS DE ENTRENAMIENTO (MongoDB) =====================================
+from datetime import datetime, date
+from bson import ObjectId
+from flask_jwt_extended import jwt_required, get_jwt
+from flask import jsonify, request, current_app 
+# Colección (log de entrenamientos)
+metrics_log = mdb.metrics_log
+
+# Índices útiles
+metrics_log.create_index([("user_id", 1), ("date", 1)])
+metrics_log.create_index([("year", 1), ("month", 1)])
+
+
+# ----------------------------- Helpers ----------------------------------------
+def _parse_yyyy_mm_dd(d: str) -> datetime:
+    """Normaliza a ‘fecha sin hora’ (00:00:00). Espera 'YYYY-MM-DD'."""
+    try:
+        return datetime.strptime(d, "%Y-%m-%d")
+    except Exception:
+        raise ValueError("fecha inválida (usa YYYY-MM-DD)")
+
+def _get_user_from_jwt():
+    """Devuelve (user_id:str|None, email:str|None) desde el JWT.
+    create_access_token(identity={"id":..., "email":...}) → sub será un dict."""
+    claims = get_jwt()
+    sub = claims.get("sub")
+    if isinstance(sub, dict):
+        return (str(sub.get("id")) if sub.get("id") is not None else None,
+                sub.get("email"))
+    return (str(sub) if sub is not None else None, claims.get("email"))
+
+def _safe_item_from_doc(d):
+    """Convierte un doc de Mongo a item serializable; omite docs viejos/malformados."""
+    try:
+        _id = d.get("_id")
+        if not _id:
+            return None
+        _id = str(_id)
+
+        mtype = d.get("type")
+        if not isinstance(mtype, str) or not mtype.strip():
+            current_app.logger.warning("Doc sin 'type', omitido: %s", d)
+            return None
+        mtype = mtype.strip().capitalize()  # Cardio/Fuerza
+
+        # hours → float
+        try:
+            hours = float(d.get("hours", 0))
+        except Exception:
+            current_app.logger.warning("Doc con 'hours' inválido, omitido: %s", d)
+            return None
+
+        # date → "YYYY-MM-DD"
+        date_raw = d.get("date")
+        if isinstance(date_raw, datetime):
+            date_str = date_raw.strftime("%Y-%m-%d")
+        elif isinstance(date_raw, str):
+            try:
+                if len(date_raw) == 10 and date_raw[4] == "-" and date_raw[7] == "-":
+                    date_str = date_raw
+                else:
+                    dt = datetime.fromisoformat(date_raw.replace("Z", "+00:00"))
+                    date_str = dt.strftime("%Y-%m-%d")
+            except Exception:
+                current_app.logger.warning("Doc con 'date' inválido, omitido: %s", d)
+                return None
+        else:
+            current_app.logger.warning("Doc sin 'date' usable, omitido: %s", d)
+            return None
+
+        return {"_id": _id, "type": mtype, "hours": hours, "date": date_str}
+    except Exception as e:
+        current_app.logger.exception("Fallo serializando doc de métricas: %s", e)
+        return None
+
+# ----------------------------- Endpoints --------------------------------------
+
+@app.post("/api/metrics")
+@jwt_required()
+def add_metric():
+    user_id, email = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"error": "No se pudo identificar al usuario"}), 401
+
+    data = request.get_json() or {}
+    m_type = str(data.get("type", "")).strip().capitalize()  # Cardio/Fuerza
+    hours  = data.get("hours", None)
+    date_str = (data.get("date") or "").strip()
+
+    if m_type not in ["Cardio", "Fuerza"]:
+        return jsonify({"error": "El tipo debe ser 'Cardio' o 'Fuerza'"}), 400
+
+    try:
+        hours = float(hours)
+    except Exception:
+        return jsonify({"error": "Horas debe ser numérico"}), 400
+
+    if not date_str:
+        dt = datetime.combine(date.today(), datetime.min.time())
+    else:
+        try:
+            dt = _parse_yyyy_mm_dd(date_str)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    doc = {
+        "user_id": user_id,
+        "email": email,
+        "type": m_type,
+        "hours": hours,
+        "date": dt,
+        "year": dt.year,
+        "month": dt.month,
+        "week": dt.isocalendar().week,
+        "created_at": datetime.utcnow(),
+    }
+    metrics_log.insert_one(doc)
+    return {"ok": True, "message": "Entrenamiento registrado"}, 201
+
+
+@app.get("/api/metrics")
+@jwt_required()
+def list_metrics():
+    user_id, _ = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"items": []})
+
+
+    cur = metrics_log.find({"user_id": user_id}).sort([("date", -1)])
+
+    out = []
+    for d in cur:
+        item = _safe_item_from_doc(d)
+        if item:
+            out.append(item)
+    return {"items": out}
+
+
+@app.get("/api/metrics/summary-current-month")
+@jwt_required()
+def summary_current_month():
+    user_id, _ = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"month": {"year": 0, "month": 0, "summary": []},
+                        "week":  {"year": 0, "week": 0, "summary": []}})
+
+    today = date.today()
+    y, m = today.year, today.month
+    current_week = today.isocalendar().week
+
+    monthly_pipeline = [
+        {"$match": {"user_id": user_id, "year": y, "month": m}},
+        {"$group": {"_id": "$type", "total_hours": {"$sum": "$hours"}}},
+        {"$sort": {"_id": 1}},
+    ]
+    weekly_pipeline = [
+        {"$match": {"user_id": user_id, "year": y, "week": current_week}},
+        {"$group": {"_id": "$type", "total_hours": {"$sum": "$hours"}}},
+        {"$sort": {"_id": 1}},
+    ]
+
+    monthly = list(metrics_log.aggregate(monthly_pipeline))
+    weekly  = list(metrics_log.aggregate(weekly_pipeline))
+
+    out_monthly = [{"type": r["_id"], "hours": r["total_hours"]} for r in monthly]
+    out_weekly  = [{"type": r["_id"], "hours": r["total_hours"]} for r in weekly]
+
+    return {
+        "month": {"year": y, "month": m, "summary": out_monthly},
+        "week":  {"year": y, "week": current_week, "summary": out_weekly},
+    }
+
+
+@app.put("/api/metrics/<metric_id>")
+@jwt_required()
+def update_metric(metric_id):
+    user_id, _ = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"error": "No se pudo identificar al usuario"}), 401
+
+    data = request.get_json() or {}
+    mtype    = str(data.get("type", "")).strip().capitalize()
+    hours_in = data.get("hours", None)
+    date_str = (data.get("date") or "").strip()
+
+    if mtype not in ["Cardio", "Fuerza"]:
+        return jsonify({"error": "El tipo debe ser 'Cardio' o 'Fuerza'"}), 400
+    try:
+        hours = float(hours_in)
+    except Exception:
+        return jsonify({"error": "Horas debe ser numérico"}), 400
+    try:
+        dt = _parse_yyyy_mm_dd(date_str)
+    except Exception:
+        return jsonify({"error": "fecha inválida (YYYY-MM-DD)"}), 400
+
+    res = metrics_log.update_one(
+        {"_id": ObjectId(metric_id), "user_id": user_id},
+        {"$set": {
+            "type": mtype,
+            "hours": hours,
+            "date": dt,
+            "year": dt.year,
+            "month": dt.month,
+            "week": dt.isocalendar().week,
+        }}
+    )
+    if res.matched_count == 0:
+        return jsonify({"error": "Métrica no encontrada"}), 404
+    return {"ok": True}
+
+
+@app.delete("/api/metrics/<metric_id>")
+@jwt_required()
+def delete_metric(metric_id):
+    user_id, _ = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"error": "No se pudo identificar al usuario"}), 401
+
+    res = metrics_log.delete_one({"_id": ObjectId(metric_id), "user_id": user_id})
+    if res.deleted_count == 0:
+        return jsonify({"error": "Métrica no encontrada"}), 404
+    return {"ok": True}
+
+from datetime import datetime, date
+from flask_jwt_extended import jwt_required
+from flask import request, jsonify
+
+@app.get("/api/metrics/summary-by-month")
+@jwt_required()
+def summary_by_month():
+    """Totales por mes (últimos N meses) separados por tipo (solo docs válidos)."""
+    user_id, _ = _get_user_from_jwt()
+    if not user_id:
+        return jsonify({"months": []})
+
+    try:
+        limit = int(request.args.get("limit", 6))
+    except Exception:
+        limit = 6
+    limit = max(1, min(limit, 24))
+
+    # Filtra SOLO documentos con schema correcto: type y hours presentes
+    pipeline = [
+        {"$match": {
+            "user_id": user_id,
+            "type": {"$exists": True, "$ne": None},
+            "hours": {"$exists": True}
+        }},
+        {"$group": {
+            "_id": {"year": "$year", "month": "$month", "type": "$type"},
+            "total_hours": {"$sum": "$hours"}
+        }},
+        {"$group": {
+            "_id": {"year": "$_id.year", "month": "$_id.month"},
+            "by_type": {"$push": {"type": "$_id.type", "hours": "$total_hours"}}
+        }},
+        {"$sort": {"_id.year": -1, "_id.month": -1}},
+        {"$limit": limit}
+    ]
+
+    rows = list(metrics_log.aggregate(pipeline))
+
+    out = []
+    for r in rows:
+        y = r["_id"]["year"]
+        m = r["_id"]["month"]
+        entry = {"year": y, "month": m, "summary": []}
+        for t in r.get("by_type", []):
+            # Tolerante por si algún doc trae type nulo o raro
+            t_type = t.get("type") or "Desconocido"
+            try:
+                t_hours = float(t.get("hours", 0))
+            except Exception:
+                t_hours = 0.0
+            entry["summary"].append({"type": t_type, "hours": t_hours})
+        out.append(entry)
+
+    return {"months": out}
 
 
 if __name__ == "__main__":
